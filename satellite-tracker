@@ -1,0 +1,764 @@
+from flask import Flask, render_template_string, request, jsonify
+import matplotlib.pyplot as plt
+import matplotlib
+matplotlib.use('Agg')  # Non-GUI backend for web
+import io
+import base64
+from skyfield.api import load, Topos
+import numpy as np
+from pytz import timezone
+import json
+from datetime import datetime, timedelta
+
+app = Flask(__name__)
+
+# Global variables for caching
+satellites_cache = None
+timescale = load.timescale()
+
+# Satellite orbital characteristics database
+SATELLITE_CHARACTERISTICS = {
+    'ISS (ZARYA)': {
+        'type': 'Space Station',
+        'inclination': 51.6,
+        'altitude_range': (370, 460),
+        'period_minutes': 92,
+        'description': 'International Space Station - 51.6° inclination'
+    },
+    'TIANGONG': {
+        'type': 'Space Station', 
+        'inclination': 42.8,
+        'altitude_range': (350, 450),
+        'period_minutes': 91,
+        'description': 'Chinese Space Station - 42.8° inclination'
+    },
+    'NOAA 15': {
+        'type': 'Weather Satellite',
+        'inclination': 98.7,
+        'altitude_range': (800, 850),
+        'period_minutes': 101,
+        'description': 'Polar Weather Satellite - 98.7° inclination'
+    },
+    'NOAA 18': {
+        'type': 'Weather Satellite',
+        'inclination': 99.2,
+        'altitude_range': (850, 870),
+        'period_minutes': 102,
+        'description': 'Polar Weather Satellite - 99.2° inclination'
+    },
+    'NOAA 19': {
+        'type': 'Weather Satellite',
+        'inclination': 99.1,
+        'altitude_range': (870, 880),
+        'period_minutes': 102,
+        'description': 'Polar Weather Satellite - 99.1° inclination'
+    }
+}
+
+def load_satellites():
+    """Load and cache satellite data"""
+    global satellites_cache
+    if satellites_cache is None:
+        try:
+            station_data = load.tle_file('https://celestrak.com/NORAD/elements/stations.txt')
+            weather_data = load.tle_file('https://celestrak.com/NORAD/elements/weather.txt')
+            
+            satellites_cache = {}
+            for sat in station_data:
+                satellites_cache[sat.name] = sat
+            for sat in weather_data:
+                satellites_cache[sat.name] = sat
+                
+        except Exception as e:
+            print(f"Error loading satellites: {e}")
+            satellites_cache = {}
+    return satellites_cache
+
+def get_satellite_positions(satellite_name, lat, lon, hours):
+    """Calculate satellite positions for given parameters with improved orbital modeling"""
+    satellites = load_satellites()
+    if satellite_name not in satellites:
+        return None, "Satellite not found"
+    
+    satellite = satellites[satellite_name]
+    observer = Topos(latitude_degrees=float(lat), longitude_degrees=float(lon))
+    
+    # Get satellite characteristics
+    sat_info = SATELLITE_CHARACTERISTICS.get(satellite_name, {
+        'type': 'Unknown',
+        'inclination': 0,
+        'altitude_range': (200, 2000),
+        'period_minutes': 90,
+        'description': f'{satellite_name} - Unknown orbit'
+    })
+    
+    # Calculate optimal time resolution based on orbital period
+    period_minutes = sat_info['period_minutes']
+    time_resolution = max(1, period_minutes // 20)  # 20 points per orbit minimum
+    
+    # Time range with better resolution
+    now = timescale.now()
+    total_minutes = int(hours) * 60
+    minutes = list(range(0, total_minutes, time_resolution))
+    
+    # Create time array
+    time_range = timescale.utc(
+        now.utc_datetime().year, 
+        now.utc_datetime().month,
+        now.utc_datetime().day, 
+        now.utc_datetime().hour, 
+        [now.utc_datetime().minute + m for m in minutes]
+    )
+    
+    # Calculate positions
+    orbit = (satellite - observer).at(time_range)
+    altitude, azimuth, distance = orbit.altaz()
+    
+    # Calculate additional orbital parameters
+    geocentric = satellite.at(time_range)
+    subpoint = geocentric.subpoint()
+    lat_sat, lon_sat = subpoint.latitude.degrees, subpoint.longitude.degrees
+    
+    # Calculate velocity and ground track
+    velocity = []
+    for i in range(len(time_range) - 1):
+        dt = (time_range[i+1].tt - time_range[i].tt) * 24 * 3600  # seconds
+        if dt > 0:
+            # Get positions at consecutive times
+            pos1 = satellite.at(time_range[i])
+            pos2 = satellite.at(time_range[i+1])
+            dr = np.sqrt(sum((pos2.position.km - pos1.position.km)**2))
+            velocity.append(dr / dt)
+        else:
+            velocity.append(0)
+    velocity.append(velocity[-1] if velocity else 0)  # Duplicate last value
+    
+    return {
+        'minutes': minutes,
+        'altitude': altitude.degrees.tolist(),
+        'azimuth': azimuth.degrees.tolist(),
+        'distance': distance.km.tolist(),
+        'velocity': velocity,
+        'satellite_latitude': lat_sat.tolist(),
+        'satellite_longitude': lon_sat.tolist(),
+        'time_range': time_range,
+        'satellite_name': satellite_name,
+        'satellite_info': sat_info,
+        'observer_lat': float(lat),
+        'observer_lon': float(lon)
+    }, None
+
+def find_passes(altitude_data, azimuth_data, minutes, min_elevation=0):
+    """Find satellite passes with proper rise/set detection"""
+    passes = []
+    altitude_array = np.array(altitude_data)
+    azimuth_array = np.array(azimuth_data)
+    minutes_array = np.array(minutes)
+    
+    # Find where satellite is above horizon
+    above_horizon = altitude_array > min_elevation
+    
+    # Find transitions (rise/set points)
+    transitions = np.where(np.diff(above_horizon.astype(int)))[0]
+    
+    # Group into passes
+    if len(transitions) > 0:
+        # If we start above horizon, add a start point
+        if above_horizon[0]:
+            transitions = np.insert(transitions, 0, 0)
+        # If we end above horizon, add an end point
+        if above_horizon[-1]:
+            transitions = np.append(transitions, len(altitude_array) - 1)
+        
+        # Group into rise/set pairs
+        for i in range(0, len(transitions) - 1, 2):
+            start_idx = transitions[i]
+            end_idx = transitions[i + 1] if i + 1 < len(transitions) else len(altitude_array) - 1
+            
+            if start_idx < end_idx:
+                pass_data = {
+                    'start_time': minutes_array[start_idx],
+                    'end_time': minutes_array[end_idx],
+                    'max_elevation': np.max(altitude_array[start_idx:end_idx+1]),
+                    'duration': minutes_array[end_idx] - minutes_array[start_idx],
+                    'start_az': azimuth_array[start_idx],
+                    'end_az': azimuth_array[end_idx],
+                    'indices': (start_idx, end_idx)
+                }
+                passes.append(pass_data)
+    
+    return passes
+
+def create_plot(data, plot_type):
+    """Generate plot based on type and return as base64 image"""
+    plt.style.use('dark_background')
+    fig, ax = plt.subplots(figsize=(12, 8))
+    
+    sat_info = data['satellite_info']
+    sat_name = data['satellite_name']
+    
+    if plot_type == 'altitude':
+        ax.plot(data['minutes'], data['altitude'], 'cyan', linewidth=2, label='Elevation')
+        ax.fill_between(data['minutes'], 0, data['altitude'], 
+                       where=np.array(data['altitude']) > 0, alpha=0.3, color='cyan')
+        
+        ax.set_title(f"{sat_name}\nElevation Over Time - {sat_info['description']}", 
+                    color='white', fontsize=14)
+        ax.set_xlabel("Minutes from Now", color='white')
+        ax.set_ylabel("Elevation (degrees)", color='white')
+        ax.axhline(y=0, color='red', linestyle='--', alpha=0.7, label='Horizon')
+        ax.axhline(y=10, color='yellow', linestyle=':', alpha=0.5, label='Good visibility')
+        
+        # Find and annotate passes
+        passes = find_passes(data['altitude'], data['azimuth'], data['minutes'])
+        for i, pass_data in enumerate(passes[:3]):  # Show first 3 passes
+            ax.annotate(f'Pass {i+1}\nMax: {pass_data["max_elevation"]:.1f}°\nDur: {pass_data["duration"]:.1f}min',
+                       xy=(pass_data['start_time'], pass_data['max_elevation']),
+                       xytext=(10, 10), textcoords='offset points',
+                       bbox=dict(boxstyle='round,pad=0.3', facecolor='yellow', alpha=0.7),
+                       fontsize=8, color='black')
+        
+        ax.legend()
+        ax.set_ylim(-10, 90)
+        
+    elif plot_type == 'azimuth':
+        # Color code by elevation
+        elevations = np.array(data['altitude'])
+        colors = plt.cm.plasma((elevations + 10) / 100)  # Normalize for colormap
+        
+        scatter = ax.scatter(data['minutes'], data['azimuth'], c=elevations, 
+                           cmap='plasma', s=20, alpha=0.8)
+        plt.colorbar(scatter, ax=ax, label='Elevation (degrees)')
+        
+        ax.set_title(f"{sat_name}\nAzimuth Direction - {sat_info['description']}", 
+                    color='white', fontsize=14)
+        ax.set_xlabel("Minutes from Now", color='white')
+        ax.set_ylabel("Azimuth (degrees)", color='white')
+        ax.set_ylim(0, 360)
+        
+        # Add compass directions
+        ax.set_yticks([0, 90, 180, 270, 360])
+        ax.set_yticklabels(['N', 'E', 'S', 'W', 'N'])
+        
+    elif plot_type == 'distance':
+        ax.plot(data['minutes'], data['distance'], 'orange', linewidth=2, label='Distance')
+        
+        # Add velocity on secondary axis
+        ax2 = ax.twinx()
+        ax2.plot(data['minutes'], data['velocity'], 'lime', linewidth=1, alpha=0.7, label='Velocity')
+        ax2.set_ylabel("Velocity (km/s)", color='lime')
+        ax2.tick_params(axis='y', labelcolor='lime')
+        
+        ax.set_title(f"{sat_name}\nDistance & Velocity - {sat_info['description']}", 
+                    color='white', fontsize=14)
+        ax.set_xlabel("Minutes from Now", color='white')
+        ax.set_ylabel("Distance (km)", color='orange')
+        
+        # Add altitude range info
+        alt_range = sat_info['altitude_range']
+        ax.axhline(y=alt_range[0] + 6371, color='red', linestyle=':', alpha=0.5, 
+                  label=f'Min altitude (~{alt_range[0]} km)')
+        ax.axhline(y=alt_range[1] + 6371, color='red', linestyle=':', alpha=0.5,
+                  label=f'Max altitude (~{alt_range[1]} km)')
+        
+        ax.legend(loc='upper left')
+        ax2.legend(loc='upper right')
+        
+    elif plot_type == 'polar':
+        fig.clear()
+        ax = fig.add_subplot(111, projection='polar')
+        
+        # Find passes
+        passes = find_passes(data['altitude'], data['azimuth'], data['minutes'])
+        
+        colors = ['cyan', 'yellow', 'lime', 'orange', 'magenta']
+        
+        for i, pass_data in enumerate(passes):
+            start_idx, end_idx = pass_data['indices']
+            if start_idx < end_idx:
+                # Convert to polar coordinates
+                theta = np.radians(data['azimuth'][start_idx:end_idx+1])
+                r = [90 - alt for alt in data['altitude'][start_idx:end_idx+1]]
+                
+                color = colors[i % len(colors)]
+                ax.plot(theta, r, color=color, linewidth=2, 
+                       label=f'Pass {i+1}: {pass_data["max_elevation"]:.1f}° max')
+                
+                # Mark start and end points
+                ax.scatter(theta[0], r[0], c=color, s=50, marker='^', alpha=0.8)
+                ax.scatter(theta[-1], r[-1], c=color, s=50, marker='v', alpha=0.8)
+        
+        # Customize polar plot
+        ax.set_ylim(0, 90)
+        ax.set_theta_zero_location('N')
+        ax.set_theta_direction(-1)
+        ax.set_title(f"{sat_name} - Sky Track\n{sat_info['description']}", 
+                    color='white', fontsize=14, pad=20)
+        
+        # Add elevation rings
+        ax.set_rticks([0, 30, 60, 90])
+        ax.set_rgrids([30, 60, 90], ['60°', '30°', 'Zenith'], alpha=0.5)
+        
+        # Add compass directions
+        ax.set_thetagrids([0, 90, 180, 270], ['N', 'E', 'S', 'W'])
+        
+        if passes:
+            ax.legend(bbox_to_anchor=(1.1, 1.0), loc='upper left')
+        else:
+            ax.text(0, 45, 'No visible passes\nin selected time period', 
+                   ha='center', va='center', fontsize=12, 
+                   bbox=dict(boxstyle='round', facecolor='red', alpha=0.7))
+    
+    elif plot_type == 'ground_track':
+        # World map ground track
+        ax.plot(data['satellite_longitude'], data['satellite_latitude'], 
+               'cyan', linewidth=2, label='Ground track')
+        ax.scatter(data['observer_lon'], data['observer_lat'], 
+                  color='red', s=100, marker='*', label='Observer', zorder=5)
+        
+        ax.set_title(f"{sat_name}\nGround Track - {sat_info['description']}", 
+                    color='white', fontsize=14)
+        ax.set_xlabel("Longitude (degrees)", color='white')
+        ax.set_ylabel("Latitude (degrees)", color='white')
+        ax.set_xlim(-180, 180)
+        ax.set_ylim(-90, 90)
+        
+        # Add grid
+        ax.grid(True, alpha=0.3)
+        ax.set_xticks(range(-180, 181, 60))
+        ax.set_yticks(range(-90, 91, 30))
+        ax.legend()
+    
+    ax.grid(True, alpha=0.3)
+    ax.tick_params(colors='white')
+    plt.tight_layout()
+    
+    # Convert plot to base64 string
+    img_buffer = io.BytesIO()
+    plt.savefig(img_buffer, format='png', facecolor='#1a1a1a', edgecolor='none', dpi=100)
+    img_buffer.seek(0)
+    img_string = base64.b64encode(img_buffer.read()).decode()
+    plt.close()
+    
+    return img_string
+
+# HTML Template with improved UI
+HTML_TEMPLATE = """
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Advanced Satellite Tracker</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #0c0c0c 0%, #1a1a2e 50%, #16213e 100%);
+            color: #ffffff;
+            min-height: 100vh;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 15px;
+            padding: 30px;
+            backdrop-filter: blur(10px);
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+        }
+        
+        h1 {
+            text-align: center;
+            margin-bottom: 30px;
+            background: linear-gradient(45deg, #00ffff, #ff6b6b);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            font-size: 2.5em;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.5);
+        }
+        
+        .controls {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+            padding: 20px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 10px;
+        }
+        
+        .form-group {
+            display: flex;
+            flex-direction: column;
+        }
+        
+        label {
+            margin-bottom: 8px;
+            font-weight: 600;
+            color: #00ffff;
+        }
+        
+        select, input {
+            padding: 12px;
+            border: 2px solid rgba(0, 255, 255, 0.3);
+            border-radius: 8px;
+            background: rgba(0, 0, 0, 0.3);
+            color: #ffffff;
+            font-size: 14px;
+            transition: border-color 0.3s ease;
+        }
+        
+        select:focus, input:focus {
+            outline: none;
+            border-color: #00ffff;
+            box-shadow: 0 0 10px rgba(0, 255, 255, 0.3);
+        }
+        
+        button {
+            padding: 15px 30px;
+            background: linear-gradient(45deg, #00ffff, #ff6b6b);
+            border: none;
+            border-radius: 8px;
+            color: white;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.2s ease;
+            margin-top: 20px;
+        }
+        
+        button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(0, 255, 255, 0.3);
+        }
+        
+        .satellite-info {
+            background: rgba(0, 255, 255, 0.1);
+            border: 1px solid rgba(0, 255, 255, 0.3);
+            border-radius: 8px;
+            padding: 15px;
+            margin: 20px 0;
+            font-size: 14px;
+        }
+        
+        .plot-container {
+            text-align: center;
+            margin-top: 30px;
+        }
+        
+        .plot-container img {
+            max-width: 100%;
+            border-radius: 10px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+        }
+        
+        .loading {
+            display: none;
+            text-align: center;
+            margin: 20px 0;
+        }
+        
+        .spinner {
+            border: 3px solid rgba(255, 255, 255, 0.1);
+            border-radius: 50%;
+            border-top: 3px solid #00ffff;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        .error {
+            background: rgba(255, 107, 107, 0.1);
+            border: 2px solid #ff6b6b;
+            border-radius: 8px;
+            padding: 15px;
+            margin: 20px 0;
+            text-align: center;
+        }
+        
+        .plot-type-description {
+            font-size: 12px;
+            color: #aaa;
+            margin-top: 5px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🛰️ Advanced Satellite Tracker</h1>
+        
+        <form id="tracker-form">
+            <div class="controls">
+                <div class="form-group">
+                    <label for="satellite">Satellite:</label>
+                    <select id="satellite" name="satellite" required>
+                        <option value="">Loading satellites...</option>
+                    </select>
+                </div>
+                
+                <div class="form-group">
+                    <label for="plot_type">Plot Type:</label>
+                    <select id="plot_type" name="plot_type" required>
+                        <option value="altitude">Elevation Over Time</option>
+                        <option value="azimuth">Azimuth Direction</option>
+                        <option value="distance">Distance & Velocity</option>
+                        <option value="polar">Polar Sky Track</option>
+                        <option value="ground_track">Ground Track</option>
+                    </select>
+                    <div class="plot-type-description" id="plot-description">
+                        Shows satellite elevation above horizon over time
+                    </div>
+                </div>
+                
+                <div class="form-group">
+                    <label for="latitude">Latitude:</label>
+                    <input type="number" id="latitude" name="latitude" 
+                           value="-20.3123" step="0.0001" min="-90" max="90" required>
+                </div>
+                
+                <div class="form-group">
+                    <label for="longitude">Longitude:</label>
+                    <input type="number" id="longitude" name="longitude" 
+                           value="118.64498" step="0.0001" min="-180" max="180" required>
+                </div>
+                
+                <div class="form-group">
+                    <label for="hours">Hours to Track:</label>
+                    <select id="hours" name="hours">
+                        <option value="6">6 hours</option>
+                        <option value="12">12 hours</option>
+                        <option value="24" selected>24 hours</option>
+                        <option value="48">48 hours</option>
+                    </select>
+                </div>
+            </div>
+            
+            <button type="submit">🔍 Track Satellite</button>
+        </form>
+        
+        <div id="satellite-info" class="satellite-info" style="display: none;"></div>
+        
+        <div class="loading" id="loading">
+            <div class="spinner"></div>
+            <p>Calculating satellite positions...</p>
+        </div>
+        
+        <div id="error-container"></div>
+        <div class="plot-container" id="plot-container"></div>
+    </div>
+
+    <script>
+        const satelliteCharacteristics = {
+            'ISS (ZARYA)': {
+                type: 'Space Station',
+                inclination: 51.6,
+                description: 'International Space Station - 51.6° inclination, ~400km altitude'
+            },
+            'TIANGONG': {
+                type: 'Space Station',
+                inclination: 42.8,
+                description: 'Chinese Space Station - 42.8° inclination, ~400km altitude'
+            },
+            'NOAA 15': {
+                type: 'Weather Satellite',
+                inclination: 98.7,
+                description: 'Polar Weather Satellite - 98.7° inclination, ~850km altitude'
+            },
+            'NOAA 18': {
+                type: 'Weather Satellite',
+                inclination: 99.2,
+                description: 'Polar Weather Satellite - 99.2° inclination, ~860km altitude'
+            },
+            'NOAA 19': {
+                type: 'Weather Satellite', 
+                inclination: 99.1,
+                description: 'Polar Weather Satellite - 99.1° inclination, ~875km altitude'
+            }
+        };
+
+        const plotDescriptions = {
+            'altitude': 'Shows satellite elevation above horizon over time',
+            'azimuth': 'Shows satellite compass direction colored by elevation',
+            'distance': 'Shows distance from observer and orbital velocity',
+            'polar': 'Shows satellite paths across the sky (polar projection)',
+            'ground_track': 'Shows satellite ground track on world map'
+        };
+
+        // Update plot description when type changes
+        document.getElementById('plot_type').addEventListener('change', function() {
+            document.getElementById('plot-description').textContent = 
+                plotDescriptions[this.value] || '';
+        });
+
+        // Update satellite info when satellite changes
+        document.getElementById('satellite').addEventListener('change', function() {
+            const infoDiv = document.getElementById('satellite-info');
+            if (this.value && satelliteCharacteristics[this.value]) {
+                const info = satelliteCharacteristics[this.value];
+                infoDiv.innerHTML = `
+                    <strong>🛰️ ${this.value}</strong><br>
+                    Type: ${info.type}<br>
+                    ${info.description}
+                `;
+                infoDiv.style.display = 'block';
+            } else {
+                infoDiv.style.display = 'none';
+            }
+        });
+
+        // Load satellites on page load
+        fetch('/satellites')
+            .then(response => response.json())
+            .then(data => {
+                const select = document.getElementById('satellite');
+                select.innerHTML = '';
+                
+                // Add featured satellites first
+                const featured = ['ISS (ZARYA)', 'TIANGONG', 'NOAA 15', 'NOAA 18', 'NOAA 19'];
+                featured.forEach(name => {
+                    if (data.includes(name)) {
+                        const option = document.createElement('option');
+                        option.value = name;
+                        option.textContent = name;
+                        select.appendChild(option);
+                    }
+                });
+                
+                // Add separator
+                const separator = document.createElement('option');
+                separator.disabled = true;
+                separator.textContent = '--- All Satellites ---';
+                select.appendChild(separator);
+                
+                // Add all other satellites
+                data.forEach(name => {
+                    if (!featured.includes(name)) {
+                        const option = document.createElement('option');
+                        option.value = name;
+                        option.textContent = name;
+                        select.appendChild(option);
+                    }
+                });
+            })
+            .catch(error => {
+                console.error('Error loading satellites:', error);
+                document.getElementById('satellite').innerHTML = 
+                    '<option value="">Error loading satellites</option>';
+            });
+
+        // Handle form submission
+        document.getElementById('tracker-form').addEventListener('submit', function(e) {
+            e.preventDefault();
+            
+            const formData = new FormData(this);
+            const params = new URLSearchParams();
+            for (let [key, value] of formData) {
+                params.append(key, value);
+            }
+            
+            document.getElementById('loading').style.display = 'block';
+            document.getElementById('plot-container').innerHTML = '';
+            document.getElementById('error-container').innerHTML = '';
+            
+            fetch('/plot?' + params.toString())
+                .then(response => response.json())
+                .then(data => {
+                    document.getElementById('loading').style.display = 'none';
+                    
+                    if (data.error) {
+                        document.getElementById('error-container').innerHTML = 
+                            `<div class="error">❌ ${data.error}</div>`;
+                    } else {
+                        document.getElementById('plot-container').innerHTML = 
+                            `<img src="data:image/png;base64,${data.plot}" alt="Satellite Plot">`;
+                    }
+                })
+                .catch(error => {
+                    document.getElementById('loading').style.display = 'none';
+                    document.getElementById('error-container').innerHTML = 
+                        `<div class="error">❌ Error: ${error.message}</div>`;
+                });
+        });
+    </script>
+</body>
+</html>
+"""
+
+@app.route('/')
+def index():
+    return render_template_string(HTML_TEMPLATE)
+
+@app.route('/satellites')
+def get_satellites():
+    satellites = load_satellites()
+    return jsonify(list(satellites.keys()))
+
+@app.route('/plot')
+def generate_plot():
+    try:
+        satellite_name = request.args.get('satellite')
+        lat = request.args.get('latitude', '-20.3123')
+        lon = request.args.get('longitude', '118.64498')
+        hours = request.args.get('hours', '24')
+        plot_type = request.args.get('plot_type', 'altitude')
+        
+        if not satellite_name:
+            return jsonify({'error': 'Satellite name is required'})
+        
+        data, error = get_satellite_positions(satellite_name, lat, lon, hours)
+        if error:
+            return jsonify({'error': error})
+        
+        plot_image = create_plot(data, plot_type)
+        return jsonify({'plot': plot_image})
+        
+    except Exception as e:
+        return jsonify({'error': f'Calculation error: {str(e)}'})
+
+def find_free_port():
+    """Find a free port starting from 5000"""
+    import socket
+    for port in range(5000, 5010):
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            try:
+                s.bind(('localhost', port))
+                return port
+            except OSError:
+                continue
+    return None
+
+if __name__ == '__main__':
+    print("🛰️ Starting Advanced Satellite Tracker...")
+    print("Loading satellite data...")
+    
+    try:
+        load_satellites()  # Preload satellites
+        
+        # Find a free port
+        free_port = find_free_port()
+        if free_port is None:
+            print("❌ No free ports found between 5000-5009")
+            print("Please close other applications or restart your computer")
+            exit(1)
+        
+        print(f"✅ Ready! Open http://localhost:{free_port} in your browser")
+        print(f"🌍 Or access from other devices: http://YOUR_IP_ADDRESS:{free_port}")
+        print("Press Ctrl+C to stop the server")
+        
+        app.run(debug=False, host='0.0.0.0', port=free_port, use_reloader=False)
+        
+    except KeyboardInterrupt:
+        print("\n👋 Advanced Satellite Tracker stopped. Goodbye!")
+    except Exception as e:
+        print(f"❌ Error starting server: {e}")
+        print("Try restarting your terminal or computer")
