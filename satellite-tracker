@@ -543,7 +543,7 @@ HTML_TEMPLATE = """
                 </div>
             </div>
             
-            <button type="submit">🔍 Track Satellite</button>
+            <button type="submit">Track Satellite</button>
         </form>
         
         <div id="satellite-info" class="satellite-info" style="display: none;"></div>
@@ -606,7 +606,7 @@ HTML_TEMPLATE = """
             if (this.value && satelliteCharacteristics[this.value]) {
                 const info = satelliteCharacteristics[this.value];
                 infoDiv.innerHTML = `
-                    <strong>🛰️ ${this.value}</strong><br>
+                    <strong>${this.value}</strong><br>
                     Type: ${info.type}<br>
                     ${info.description}
                 `;
