@@ -1,4 +1,4 @@
-# Advanced Satellite Tracker - Real-Time Orbital Visualisation System
+# Advanced Satellite Tracker: Real-Time Orbital Visualisation System
 
 ## A Python Flask application for tracking and visualising satellite passes with multiple plot types and orbital parameter analysis
 
@@ -103,3 +103,100 @@ Press Ctrl+C to stop the server
 ```
 
 Open your web browser and navigate to ```http://localhost:5000```
+
+### Using the Application
+
+#### Selecting a Satellite
+
+The application provides several pre-loaded satellites organised by type:
+
+#### Featured Satellites:
+
+- ISS (ZARYA) - International Space Station
+- TIANGONG - Chinese Space Station
+- NOAA 15, 18, 19 - Polar Weather Satellites
+
+Additional satellites are available in the dropdown menu below the separator line.
+
+#### Setting Observer Location
+
+Enter your location coordinates:
+
+- Latitude: -90 to 90 degrees (negative for South, positive for North)
+- Longitude: -180 to 180 degrees (negative for West, positive for East)
+
+Default location is set to Western Australia (-20.3123, 118.64498).
+
+#### Choosing Plot Type
+
+Select from five visualisation types:
+
+| Plot Type           | Description                                                   |
+|---------------------|---------------------------------------------------------------|
+| Elevation Over Time | Shows satellite elevation above horizon with pass annotations |
+| Azimuth Direction   | Displays compass direction coloured by elevation              |
+| Distance & Velocity | Shows distance from observer and orbital velocity             |
+| Polar Sky Track     | Polar projection of satellite paths across the sky            |
+| Ground Track        | Shows satellite ground track and observer location            |
+
+
+#### Setting Time Range
+
+Choose tracking duration:
+
+- 6 hours
+- 12 hours
+- 24 hours (default)
+- 48 hours
+
+#### Generating Visualisation
+
+Click the "Track Satellite" button to calculate positions and generate the plot. The application will:
+
+1. Download latest TLE data if needed
+2. Calculate satellite positions at optimal time intervals
+3. Generate the selected plot type
+4. Display the result in the browser
+
+
+### Understanding the Visualisations
+
+#### Elevation Plot
+
+- Blue line: Satellite elevation above horizon
+- Red dashed line: Horizon (0 degrees)
+- Yellow dotted line: Good visibility threshold (10 degrees)
+- Annotations: Pass details including maximum elevation and duration
+- Cyan shading: Visible pass periods
+
+#### Polar Sky Track
+
+- Coloured lines: Individual satellite passes
+- Triangle markers: Rise points (satellite appears)
+- Inverted triangle markers: Set points (satellite disappears)
+- Concentric circles: Elevation rings (30°, 60°, 90°)
+- Compass labels: N, E, S, W directions
+
+#### Ground Track
+
+- Cyan line: Satellite path over Earth's surface
+- Red star: Observer location
+- Grid lines: Latitude and longitude reference
+
+#### Distance & Velocity Plot
+
+- Orange line: Distance from observer (left axis)
+- Lime line: Orbital velocity (right axis)
+- Red dotted lines: Typical altitude range for the satellite
+
+#### Azimuth Plot
+
+- Colour gradient: Elevation angle (purple = below horizon, yellow = high elevation)
+- Compass labels: Cardinal directions at 0°, 90°, 180°, 270°
+
+### Stopping the Application
+
+To stop the server:
+
+- Press ```Ctrl+C``` in the terminal where the application is running
+- Wait for the shutdown message
