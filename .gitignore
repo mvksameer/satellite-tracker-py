@@ -1,0 +1,36 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environments
+venv/
+env/
+ENV/
+.venv
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS generated files
+.DS_Store
+Thumbs.db
+
+# Satellite TLE data files (downloaded automatically)
+stations.txt
+weather.txt
+
+# Skyfield data cache
+*.bsp
+*.tf
+*.tpc
+*.tls
+
+# Log files
+*.log
+
+# Optional: Remove this line if you want to commit screenshots
+screenshots/
