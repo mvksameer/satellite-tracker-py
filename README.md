@@ -200,3 +200,308 @@ To stop the server:
 
 - Press ```Ctrl+C``` in the terminal where the application is running
 - Wait for the shutdown message
+
+## Technical Details
+
+### Satellite Data Sources
+
+The application automatically downloads TLE data from CelesTrak:
+
+- Space Stations: https://celestrak.com/NORAD/elements/stations.txt
+- Weather Satellites: https://celestrak.com/NORAD/elements/weather.txt
+
+Data is cached during the session to minimise download requests.
+
+### Calculation Methods
+
+The application uses Skyfield for high-precision calculations:
+
+- Position Calculation: SGP4 propagation from TLE data
+- Observer Reference: Topocentric coordinates (altitude, azimuth, distance)
+- Pass Detection: Automatic identification of rise and set events
+- Time Resolution: Adaptive based on orbital period (typically 1-5 minute intervals)
+- Velocity Calculation: Distance change between consecutive time steps
+
+### Satellite Database
+
+Pre-configured satellites with orbital characteristics:
+
+| Satellite   | Type          | Inclination | Altitude Range | Orbital Period |
+|-------------|---------------|-------------|----------------|----------------|
+| ISS (ZARYA) | Space Station | 51.6°       | 370-460 km     | 92 minutes     |
+| TIANGONG    | Space Station | 42.8°       | 350-450 km     | 91 minutes     |
+| NOAA 15     | Weather       | 98.7°       | 800-850 km     | 101 minutes    |
+| NOAA 18     | Weather       | 99.2°       | 850-870 km     | 102 minutes    |
+| NOAA 19     | Weather       | 99.1°       | 870-880 km     | 102 minutes    |
+
+### Port Configuration
+
+The application automatically searches for available ports from 5000 to 5009. If all ports are in use, an error message will be displayed.
+
+### Browser Compatibility
+
+The application works on all modern browsers:
+
+- Chrome 90+
+- Firefox 88+
+- Safari 14+
+- Edge 90+
+
+### API Endpoints
+
+| Method | Endpoint    | Description                                 |
+|--------|-------------|---------------------------------------------|
+| ```GET```    | ```/```           | Main application interface                  |
+| ```GET```    | ```/satellites``` | Returns list of available satellites (JSON) |
+| ```GET```    | ```/plot```       | Generates plot with query parameters        |
+
+#### Query Parameters for /plot:
+
+- ```satellite```: Satellite name
+- ```latitude```: Observer latitude
+- ```longitude```: Observer longitude
+- ```hours```: Tracking duration
+- ```plot_type```: Type of visualisation
+
+## Troubleshooting
+
+### Common Issues
+
+#### Issue: Satellite data fails to load
+
+Solution: Check internet connection. CelesTrak may be temporarily unavailable. Wait a few minutes and try again.
+
+#### Issue: No visible passes shown
+
+Solution: The satellite may not pass over your location during the selected time period. Try increasing the time range to 48 hours or select a different satellite. Polar-orbiting satellites (NOAA series) have better coverage than equatorial satellites.
+
+#### Issue: Port already in use
+
+Solution: The application will automatically try ports 5000-5009. If all are in use, close other applications or restart your computer.
+
+#### Calculation takes too long
+
+Solution: Longer time periods (48 hours) require more calculations. Wait for completion or reduce the time range.
+
+#### Issue: Plot not displaying
+
+Solution: Check browser console for errors. Ensure JavaScript is enabled. Try refreshing the page.
+
+#### Issue: Location coordinates not updating
+
+Solution: Ensure latitude is between -90 and 90, longitude between -180 and 180. Use decimal degrees format.
+
+## File Structure
+```bash
+project-directory/
+│
+├── app.py                 # Main Flask application file
+├── README.md             # This file
+└── screenshots/          # (Optional) Directory for documentation images
+    ├── tracker-dashboard.png
+    ├── elevation-plot.png
+    ├── polar-track.png
+    ├── ground-track.png
+    └── distance-velocity.png
+```
+
+## Project Architecture
+
+### Frontend Components
+
+- HTML Interface: Single-page application with dynamic form controls
+- CSS Styling: Dark space-themed design with gradient effects
+- JavaScript: Handles form submission, satellite loading, and plot updates
+- AJAX Requests: Asynchronous data fetching without page reload
+
+### Backend Components
+
+- Flask Routes: Serves HTML and handles API requests
+- Skyfield Library: Performs astronomical calculations and satellite propagation
+- Matplotlib: Generates static plots with customised styling
+- NumPy: Handles array operations for position and velocity calculations
+- Caching System: Stores satellite data to reduce download requests
+
+### Data Flow
+
+1. User selects satellite and parameters
+2. Frontend sends AJAX request to ```/plot``` endpoint
+3. Backend calculates positions using Skyfield
+4. Matplotlib generates plot as PNG image
+5. Image encoded as base64 and returned to frontend
+6. Browser displays image in plot container
+
+## Understanding Satellite Tracking
+
+### Observer Coordinates
+
+#### Topocentric Coordinates:
+
+- Altitude (Elevation): Angle above horizon (0° = horizon, 90° = directly overhead)
+- Azimuth: Compass direction (0° = North, 90° = East, 180° = South, 270° = West)
+- Distance: Straight-line distance from observer to satellite
+
+### Satellite Passes
+
+A satellite pass occurs when a satellite rises above the horizon, reaches maximum elevation, and sets below the horizon. Key parameters:
+
+- Rise Time: When satellite appears above horizon
+- Set Time: When satellite disappears below horizon
+- Maximum Elevation: Highest point in the sky during pass
+- Duration: Total time satellite is visible
+
+#### Visibility Factors:
+
+- Passes above 10° elevation are generally easier to observe
+- Higher maximum elevations provide better viewing opportunities
+- Night-time passes allow visual observation if satellite is illuminated
+
+### Orbital Inclination
+
+Inclination determines which latitudes a satellite can pass over:
+
+- Low Inclination (0-30°): Limited to tropical and equatorial regions
+- Medium Inclination (30-60°): Covers mid-latitude regions
+- Polar Orbits (80-100°): Covers entire Earth over time
+
+### TLE Data Format
+
+Two-Line Element sets describe satellite orbits in a standardised format recognised by tracking software worldwide. The application automatically parses this data to calculate positions.
+
+## Educational Use Cases
+
+This application is ideal for:
+
+- Amateur Satellite Observers: Planning observation sessions
+- Radio Operators: Tracking communication satellites for contact opportunities
+- Education: Teaching orbital mechanics and satellite technology
+- Weather Monitoring: Understanding polar-orbiting weather satellite coverage
+- Space Station Tracking: Finding ISS and Tiangong visible passes
+- Photography: Planning satellite photography sessions
+
+## Performance Notes
+
+- Initial Load Time: 2-5 seconds for downloading satellite data
+- Calculation Time: 1-3 seconds for 24-hour tracking period
+- Memory Usage: Approximately 100-150 MB during operation
+- Network Usage: Minimal after initial TLE download (cached for session)
+
+## Satellite Visibility Tips
+
+#### Best Viewing Conditions:
+
+- Clear skies with minimal cloud cover
+- Low light pollution for visual observations
+- Passes with maximum elevation above 30°
+- Dawn and dusk for illuminated satellites against dark sky
+
+#### ISS Visibility:
+
+- One of the brightest objects in night sky
+- Visible to naked eye during favourable passes
+- Multiple passes per day from most locations
+- Best viewing during morning and evening twilight
+
+#### Weather Satellites:
+
+- Generally dimmer than ISS
+- Require binoculars or telescope for visual observation
+- Polar orbits provide regular coverage
+- Useful for radio reception tracking
+
+## Future Enhancements
+
+Potential features for future versions:
+
+- Real-time position updates with animation
+- Pass prediction table with rise/set times
+- Visibility calculations (daylight vs darkness)
+- Multiple satellite comparison
+- Radio frequency information for communication satellites
+- Satellite footprint visualisation
+- Export pass predictions to calendar
+- Mobile-responsive touch controls
+- Offline mode with cached TLE data
+
+## Mathematical References
+
+The tracking calculations are based on:
+
+- Vallado, D. A., *"Fundamentals of Astrodynamics and Applications"*
+- Hoots, F. R., Roehrich, R. L., *"Spacetrack Report No. 3: Models for Propagation of NORAD Element Sets"*
+- Kelso, T. S., *"CelesTrak: Current NORAD Two-Line Element Sets"*
+
+## License and Credits
+
+This application uses the following open-source libraries:
+
+| Library    | License              |
+|------------|----------------------|
+| Flask      | BSD-3-Clause License |
+| Matplotlib | PSF-based License    |
+| Skyfield   | MIT License          |
+| NumPy      | BSD License          |
+| pytz       | MIT License          |
+
+Data Sources:
+
+CelesTrak (Dr. T.S. Kelso) for TLE data
+
+## Support and Contributions
+
+For issues, questions, or suggestions:
+
+1. Check the troubleshooting section above
+2. Verify internet connection for TLE downloads
+3. Ensure coordinates are in correct format
+4. Try different time ranges if no passes are visible
+5. Check browser console for JavaScript errors
+
+
+## Version History
+
+v1.0: Initial release with multiple plot types and automatic satellite data loading
+
+
+## System Requirements
+
+### Minimum Requirements
+
+- Python 3.7+
+- 2 GB RAM
+- Internet connection for TLE data
+- Modern web browser with JavaScript enabled
+
+### Recommended
+
+- Python 3.9+
+- 4 GB RAM
+- Stable internet connection
+- Chrome or Firefox latest version
+
+## Quick Start Example
+
+For a quick test run:
+```bash
+# Install dependencies
+pip install flask matplotlib skyfield numpy pytz
+
+# Run application
+python app.py
+
+# Open browser to http://localhost:5000
+```
+
+Then:
+
+1. Select "ISS (ZARYA)" from satellite dropdown
+2. Keep default location or enter your coordinates
+3. Select "Polar Sky Track" as plot type
+4. Click "Track Satellite"
+5. View the polar projection of ISS passes
+
+## Acknowledgements
+
+This application builds upon the excellent work of the astronomical Python community, particularly the Skyfield library by Brandon Rhodes. Special thanks to CelesTrak and Dr. T.S. Kelso for providing freely accessible satellite tracking data that makes applications like this possible.
+
+## Made with Python, Flask, and a passion for Space Exploration.
