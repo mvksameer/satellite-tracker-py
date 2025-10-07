@@ -27,23 +27,33 @@ The application automatically downloads current satellite data for space station
 ## Application Screenshots
 
 ### Main Interface
-![Main Dashboard](screenshots/tracker-dashboard.png)
+
+<img width="1427" height="641" alt="Screenshot 2025-10-07 at 17 48 46" src="https://github.com/user-attachments/assets/af57401f-3efd-4c6a-a5d8-c50a5ce88756" />
+
 *Control panel with satellite selection, plot type, observer location, and tracking duration*
 
 ### Elevation Plot
-![Elevation Plot](screenshots/elevation-plot.png)
+
+<img width="1218" height="773" alt="Screenshot 2025-10-07 at 17 39 05" src="https://github.com/user-attachments/assets/50013327-903c-4966-9ca4-3f7d9abf130b" />
+
 *Satellite elevation above horizon over time with pass annotations*
 
 ### Polar Sky Track
-![Polar Track](screenshots/polar-track.png)
+
+<img width="1148" height="781" alt="Screenshot 2025-10-07 at 17 40 04" src="https://github.com/user-attachments/assets/09b04aca-a981-4738-b3fb-300dc4be73c6" />
+
 *Polar projection showing satellite paths across the sky*
 
 ### Ground Track
-![Ground Track](screenshots/ground-track.png)
+
+<img width="1200" height="784" alt="Screenshot 2025-10-07 at 17 42 26" src="https://github.com/user-attachments/assets/2e00ac43-2eab-4017-81a4-de24acb0ed00" />
+
 *Satellite ground track on world map with observer location*
 
 ### Distance and Velocity
-![Distance Velocity](screenshots/distance-velocity.png)
+
+<img width="1206" height="784" alt="Screenshot 2025-10-07 at 17 47 26" src="https://github.com/user-attachments/assets/eff73364-34d7-450b-bc14-280d3201eb97" />
+
 *Distance from observer and orbital velocity analysis*
 
 ---
