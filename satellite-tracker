@@ -760,7 +760,7 @@ if __name__ == '__main__':
         # Find a free port
         free_port = find_free_port()
         if free_port is None:
-            print(" No free ports found between 5000-5009")
+            print(" No free usable ports found between 5000-5009")
             print("Please close other applications or restart your computer")
             exit(1)
         
