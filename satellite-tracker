@@ -83,7 +83,7 @@ def get_satellite_positions(satellite_name, lat, lon, hours):
     satellite = satellites[satellite_name]
     observer = Topos(latitude_degrees=float(lat), longitude_degrees=float(lon))
     
-    # Get satellite characteristics
+    #  satellite characteristics
     sat_info = SATELLITE_CHARACTERISTICS.get(satellite_name, {
         'type': 'Unknown',
         'inclination': 0,
@@ -92,16 +92,17 @@ def get_satellite_positions(satellite_name, lat, lon, hours):
         'description': f'{satellite_name} - Unknown orbit'
     })
     
-    # Calculate optimal time resolution based on orbital period
+    #  optimal time resolution based on orbital period
     period_minutes = sat_info['period_minutes']
-    time_resolution = max(1, period_minutes // 20)  # 20 points per orbit minimum
-    
+    #time_resolution = max(1, period_minutes // 20)  # 20 points per orbit minimum
+    time_resolution = 1
+
     # Time range with better resolution
     now = timescale.now()
     total_minutes = int(hours) * 60
     minutes = list(range(0, total_minutes, time_resolution))
     
-    # Create time array
+    #  time array
     time_range = timescale.utc(
         now.utc_datetime().year, 
         now.utc_datetime().month,
@@ -110,21 +111,21 @@ def get_satellite_positions(satellite_name, lat, lon, hours):
         [now.utc_datetime().minute + m for m in minutes]
     )
     
-    # Calculate positions
+    #  positions
     orbit = (satellite - observer).at(time_range)
     altitude, azimuth, distance = orbit.altaz()
     
-    # Calculate additional orbital parameters
+    #  additional orbital parameters
     geocentric = satellite.at(time_range)
     subpoint = geocentric.subpoint()
     lat_sat, lon_sat = subpoint.latitude.degrees, subpoint.longitude.degrees
     
-    # Calculate velocity and ground track
+    #  velocity and ground track
     velocity = []
     for i in range(len(time_range) - 1):
         dt = (time_range[i+1].tt - time_range[i].tt) * 24 * 3600  # seconds
         if dt > 0:
-            # Get positions at consecutive times
+            #  positions at consecutive times
             pos1 = satellite.at(time_range[i])
             pos2 = satellite.at(time_range[i+1])
             dr = np.sqrt(sum((pos2.position.km - pos1.position.km)**2))
@@ -256,9 +257,9 @@ def create_plot(data, plot_type):
         
         # Add altitude range info
         alt_range = sat_info['altitude_range']
-        ax.axhline(y=alt_range[0] + 6371, color='red', linestyle=':', alpha=0.5, 
+        ax.axhline(y=alt_range[0], color='red', linestyle=':', alpha=0.5, 
                   label=f'Min altitude (~{alt_range[0]} km)')
-        ax.axhline(y=alt_range[1] + 6371, color='red', linestyle=':', alpha=0.5,
+        ax.axhline(y=alt_range[1], color='red', linestyle=':', alpha=0.5,
                   label=f'Max altitude (~{alt_range[1]} km)')
         
         ax.legend(loc='upper left')
@@ -310,12 +311,24 @@ def create_plot(data, plot_type):
                    bbox=dict(boxstyle='round', facecolor='red', alpha=0.7))
     
     elif plot_type == 'ground_track':
-        # World map ground track
-        ax.plot(data['satellite_longitude'], data['satellite_latitude'], 
-               'cyan', linewidth=2, label='Ground track')
+        # Convert to numpy arrays for the wrap-around fix
+        lons = np.array(data['satellite_longitude'])
+        lats = np.array(data['satellite_latitude'])
+
+        # Find where the longitude jumps across the map edge (difference > 300 degrees)
+        diffs = np.diff(lons)
+        wrap_indices = np.where(np.abs(diffs) > 300)[0]
+        
+        # Insert NaNs to tell Matplotlib to break the line
+        lons_fixed = np.insert(lons, wrap_indices + 1, np.nan)
+        lats_fixed = np.insert(lats, wrap_indices + 1, np.nan)
+
+        # World map ground track using the fixed arrays
+        ax.plot(lons_fixed, lats_fixed, 'cyan', linewidth=2, label='Ground track')
         ax.scatter(data['observer_lon'], data['observer_lat'], 
                   color='red', s=100, marker='*', label='Observer', zorder=5)
         
+        # --- Keep all your original formatting below here ---
         ax.set_title(f"{sat_name}\nGround Track - {sat_info['description']}", 
                     color='white', fontsize=14)
         ax.set_xlabel("Longitude (degrees)", color='white')
@@ -328,7 +341,7 @@ def create_plot(data, plot_type):
         ax.set_xticks(range(-180, 181, 60))
         ax.set_yticks(range(-90, 91, 30))
         ax.legend()
-    
+        
     ax.grid(True, alpha=0.3)
     ax.tick_params(colors='white')
     plt.tight_layout()
@@ -495,7 +508,7 @@ HTML_TEMPLATE = """
 </head>
 <body>
     <div class="container">
-        <h1>🛰️ Advanced Satellite Tracker</h1>
+        <h1> Advanced Satellite Tracker</h1>
         
         <form id="tracker-form">
             <div class="controls">
@@ -677,7 +690,7 @@ HTML_TEMPLATE = """
                     
                     if (data.error) {
                         document.getElementById('error-container').innerHTML = 
-                            `<div class="error">❌ ${data.error}</div>`;
+                            `<div class="error"> ${data.error}</div>`;
                     } else {
                         document.getElementById('plot-container').innerHTML = 
                             `<img src="data:image/png;base64,${data.plot}" alt="Satellite Plot">`;
@@ -686,7 +699,7 @@ HTML_TEMPLATE = """
                 .catch(error => {
                     document.getElementById('loading').style.display = 'none';
                     document.getElementById('error-container').innerHTML = 
-                        `<div class="error">❌ Error: ${error.message}</div>`;
+                        `<div class="error"> Error: ${error.message}</div>`;
                 });
         });
     </script>
@@ -738,7 +751,7 @@ def find_free_port():
     return None
 
 if __name__ == '__main__':
-    print("🛰️ Starting Advanced Satellite Tracker...")
+    print(" Starting Advanced Satellite Tracker...")
     print("Loading satellite data...")
     
     try:
@@ -747,18 +760,18 @@ if __name__ == '__main__':
         # Find a free port
         free_port = find_free_port()
         if free_port is None:
-            print("❌ No free ports found between 5000-5009")
+            print(" No free ports found between 5000-5009")
             print("Please close other applications or restart your computer")
             exit(1)
         
-        print(f"✅ Ready! Open http://localhost:{free_port} in your browser")
-        print(f"🌍 Or access from other devices: http://YOUR_IP_ADDRESS:{free_port}")
+        print(f" Ready! Open http://localhost:{free_port} in your browser")
+        print(f" Or access from other devices: http://YOUR_IP_ADDRESS:{free_port}")
         print("Press Ctrl+C to stop the server")
         
         app.run(debug=False, host='0.0.0.0', port=free_port, use_reloader=False)
         
     except KeyboardInterrupt:
-        print("\n👋 Advanced Satellite Tracker stopped. Goodbye!")
+        print("\n Advanced Satellite Tracker stopped. Goodbye!")
     except Exception as e:
-        print(f"❌ Error starting server: {e}")
+        print(f" Error starting server: {e}")
         print("Try restarting your terminal or computer")
