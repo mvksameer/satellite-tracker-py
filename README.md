@@ -34,7 +34,7 @@ The application automatically downloads current satellite data for space station
 
 ### Elevation Plot
 
-<img width="1218" height="773" alt="Screenshot 2025-10-07 at 17 39 05" src="https://github.com/user-attachments/assets/50013327-903c-4966-9ca4-3f7d9abf130b" />
+<img width="698" height="457" alt="Screenshot 2026-03-27 222723" src="https://github.com/user-attachments/assets/45a9f15e-c97a-4157-9c16-9221f32fb226" />
 
 *Satellite elevation above horizon over time with pass annotations*
 
@@ -46,13 +46,13 @@ The application automatically downloads current satellite data for space station
 
 ### Ground Track
 
-<img width="1200" height="784" alt="Screenshot 2025-10-07 at 17 42 26" src="https://github.com/user-attachments/assets/2e00ac43-2eab-4017-81a4-de24acb0ed00" />
+<img width="700" height="467" alt="Screenshot 2026-03-27 222813" src="https://github.com/user-attachments/assets/6bda8b65-3fe8-446c-a47d-8bcb885d087f" />
 
 *Satellite ground track on world map with observer location*
 
 ### Distance and Velocity
 
-<img width="1206" height="784" alt="Screenshot 2025-10-07 at 17 47 26" src="https://github.com/user-attachments/assets/eff73364-34d7-450b-bc14-280d3201eb97" />
+<img width="693" height="456" alt="Screenshot 2026-03-27 222753" src="https://github.com/user-attachments/assets/17bd6420-c95d-4d23-a245-57e90aeb1d59" />
 
 *Distance from observer and orbital velocity analysis*
 
