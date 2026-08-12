@@ -1,4 +1,4 @@
-# Advanced Satellite Tracker: Real-Time Orbital Visualisation System
+# Advanced Satellite Tracker: Real-Time Orbital Visualisation System [Version 2.0]
 
 ## A Python Flask application for tracking and visualising satellite passes with multiple plot types and orbital parameter analysis
 
