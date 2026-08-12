@@ -28,31 +28,31 @@ The application automatically downloads current satellite data for space station
 
 ### Main Interface
 
-<img width="1427" height="641" alt="Screenshot 2025-10-07 at 17 48 46" src="https://github.com/user-attachments/assets/af57401f-3efd-4c6a-a5d8-c50a5ce88756" />
+<img width="1528" height="784" alt="Tracker page with satellite selection, plot type, observer location, and tracking duration" src="screenshots/tracker-dashboard.png" />
 
 *Control panel with satellite selection, plot type, observer location, and tracking duration*
 
 ### Elevation Plot
 
-<img width="698" height="457" alt="Screenshot 2026-03-27 222723" src="https://github.com/user-attachments/assets/45a9f15e-c97a-4157-9c16-9221f32fb226" />
+<img width="1200" height="800" alt="Elevation over time plot with pass annotations" src="screenshots/elevation-plot.png" />
 
 *Satellite elevation above horizon over time with pass annotations*
 
 ### Polar Sky Track
 
-<img width="1148" height="781" alt="Screenshot 2025-10-07 at 17 40 04" src="https://github.com/user-attachments/assets/09b04aca-a981-4738-b3fb-300dc4be73c6" />
+<img width="1200" height="800" alt="Polar projection of satellite passes" src="screenshots/polar-track.png" />
 
 *Polar projection showing satellite paths across the sky*
 
 ### Ground Track
 
-<img width="700" height="467" alt="Screenshot 2026-03-27 222813" src="https://github.com/user-attachments/assets/6bda8b65-3fe8-446c-a47d-8bcb885d087f" />
+<img width="1200" height="800" alt="Ground track on a world map" src="screenshots/ground-track.png" />
 
 *Satellite ground track on world map with observer location*
 
 ### Distance and Velocity
 
-<img width="693" height="456" alt="Screenshot 2026-03-27 222753" src="https://github.com/user-attachments/assets/17bd6420-c95d-4d23-a245-57e90aeb1d59" />
+<img width="1200" height="800" alt="Distance and velocity plot" src="screenshots/distance-velocity.png" />
 
 *Distance from observer and orbital velocity analysis*
 
@@ -69,7 +69,7 @@ Before installing, ensure you have the following installed on your system:
 
 ### Step 1: Download the Code
 
-Save the provided code as `app.py` in your desired project directory.
+Save the provided code as `satellite-tracker.py`, alongside its `templates/` and `static/` folders, in your desired project directory.
 
 ### Step 2: Install Required Python Packages
 
@@ -98,10 +98,10 @@ python -c "import flask, matplotlib, skyfield, numpy, pytz; print('All packages 
 ### Starting the application
 
 1. Open a terminal or command prompt
-2. Navigate to the directory containing ```app.py```
+2. Navigate to the directory containing ```satellite-tracker.py```
 3. Run the following command:
 ```bash
-python app.py
+python satellite-tracker.py
 ```
 4. You should see output similar to:
 ```bash
@@ -123,7 +123,7 @@ The application provides several pre-loaded satellites organised by type:
 #### Featured Satellites:
 
 - ISS (ZARYA) - International Space Station
-- TIANGONG - Chinese Space Station
+- CSS (TIANHE) - Chinese Space Station
 - NOAA 15, 18, 19 - Polar Weather Satellites
 
 Additional satellites are available in the dropdown menu below the separator line.
@@ -217,10 +217,10 @@ To stop the server:
 
 The application automatically downloads TLE data from CelesTrak:
 
-- Space Stations: https://celestrak.com/NORAD/elements/stations.txt
-- Weather Satellites: https://celestrak.com/NORAD/elements/weather.txt
+- Space Stations: https://celestrak.org/NORAD/elements/gp.php?GROUP=stations&FORMAT=tle
+- Weather Satellites: https://celestrak.org/NORAD/elements/gp.php?GROUP=weather&FORMAT=tle
 
-Data is cached during the session to minimise download requests.
+Featured satellites that fall out of their usual group are fetched again by name as a fallback. Data is cached to local TLE files to minimise download requests.
 
 ### Calculation Methods
 
@@ -236,13 +236,13 @@ The application uses Skyfield for high-precision calculations:
 
 Pre-configured satellites with orbital characteristics:
 
-| Satellite   | Type          | Inclination | Altitude Range | Orbital Period |
-|-------------|---------------|-------------|----------------|----------------|
-| ISS (ZARYA) | Space Station | 51.6°       | 370-460 km     | 92 minutes     |
-| TIANGONG    | Space Station | 42.8°       | 350-450 km     | 91 minutes     |
-| NOAA 15     | Weather       | 98.7°       | 800-850 km     | 101 minutes    |
-| NOAA 18     | Weather       | 99.2°       | 850-870 km     | 102 minutes    |
-| NOAA 19     | Weather       | 99.1°       | 870-880 km     | 102 minutes    |
+| Satellite    | Type          | Inclination | Altitude Range | Orbital Period |
+|--------------|---------------|-------------|----------------|----------------|
+| ISS (ZARYA)  | Space Station | 51.6°       | 370-460 km     | 92 minutes     |
+| CSS (TIANHE) | Space Station | 41.5°       | 350-450 km     | 91 minutes     |
+| NOAA 15      | Weather       | 98.7°       | 800-850 km     | 101 minutes    |
+| NOAA 18      | Weather       | 99.2°       | 850-870 km     | 102 minutes    |
+| NOAA 19      | Weather       | 99.1°       | 870-880 km     | 102 minutes    |
 
 ### Port Configuration
 
@@ -259,11 +259,14 @@ The application works on all modern browsers:
 
 ### API Endpoints
 
-| Method | Endpoint    | Description                                 |
-|--------|-------------|---------------------------------------------|
-| ```GET```    | ```/```           | Main application interface                  |
-| ```GET```    | ```/satellites``` | Returns list of available satellites (JSON) |
-| ```GET```    | ```/plot```       | Generates plot with query parameters        |
+| Method | Endpoint          | Description                                  |
+|--------|-------------------|-----------------------------------------------|
+| ```GET```    | ```/```           | Home page                                    |
+| ```GET```    | ```/about```      | About page                                   |
+| ```GET```    | ```/tracker```    | The tracker tool                             |
+| ```GET```    | ```/roadmap```    | Roadmap page                                 |
+| ```GET```    | ```/satellites``` | Returns list of available satellites (JSON)  |
+| ```GET```    | ```/plot```       | Generates plot with query parameters         |
 
 #### Query Parameters for /plot:
 
@@ -305,9 +308,18 @@ Solution: Ensure latitude is between -90 and 90, longitude between -180 and 180.
 ```bash
 project-directory/
 │
-├── app.py                 # Main Flask application file
-├── README.md             # This file
-└── screenshots/          # (Optional) Directory for documentation images
+├── satellite-tracker.py   # Flask application: routes and orbital calculations
+├── templates/             # Jinja2 page templates
+│   ├── base.html           # Shared nav, footer and lightbox
+│   ├── home.html
+│   ├── about.html
+│   ├── tracker.html
+│   └── roadmap.html
+├── static/
+│   ├── css/style.css      # Site-wide stylesheet
+│   └── js/app.js          # Nav, reveal animations, tracker form logic
+├── README.md               # This file
+└── screenshots/            # Documentation images
     ├── tracker-dashboard.png
     ├── elevation-plot.png
     ├── polar-track.png
@@ -319,9 +331,9 @@ project-directory/
 
 ### Frontend Components
 
-- HTML Interface: Single-page application with dynamic form controls
-- CSS Styling: Dark space-themed design with gradient effects
-- JavaScript: Handles form submission, satellite loading, and plot updates
+- HTML Interface: Four Jinja2 templates (Home, About, Tracker, Roadmap) sharing a common layout
+- CSS Styling: Flat, dark interface with no gradients, using native cross-document view transitions between pages
+- JavaScript: Handles form submission, satellite loading, plot updates and scroll-reveal animations
 - AJAX Requests: Asynchronous data fetching without page reload
 
 ### Backend Components
@@ -386,7 +398,7 @@ This application is ideal for:
 - Radio Operators: Tracking communication satellites for contact opportunities
 - Education: Teaching orbital mechanics and satellite technology
 - Weather Monitoring: Understanding polar-orbiting weather satellite coverage
-- Space Station Tracking: Finding ISS and Tiangong visible passes
+- Space Station Tracking: Finding ISS and CSS (Tianhe) visible passes
 - Photography: Planning satellite photography sessions
 
 ## Performance Notes
@@ -472,6 +484,8 @@ For issues, questions, or suggestions:
 
 v1.0: Initial release with multiple plot types and automatic satellite data loading
 
+v2.0: Rebuilt as a multi-page website with a separate Home, About, Tracker and Roadmap page, moved styling and scripts into their own files, and refreshed the interface with a flat, dark design
+
 
 ## System Requirements
 
@@ -497,18 +511,19 @@ For a quick test run:
 pip install flask matplotlib skyfield numpy pytz
 
 # Run application
-python app.py
+python satellite-tracker.py
 
 # Open browser to http://localhost:5000
 ```
 
 Then:
 
-1. Select "ISS (ZARYA)" from satellite dropdown
-2. Keep default location or enter your coordinates
-3. Select "Polar Sky Track" as plot type
-4. Click "Track Satellite"
-5. View the polar projection of ISS passes
+1. Open the Tracker page from the navigation bar
+2. Select "ISS (ZARYA)" from satellite dropdown
+3. Keep default location or enter your coordinates
+4. Select "Polar Sky Track" as plot type
+5. Click "Track Satellite"
+6. View the polar projection of ISS passes
 
 ## Acknowledgements
 

@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <script>document.documentElement.classList.add('js');</script>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Advanced Satellite Tracker{% endblock %}</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+    <header class="site-nav" id="site-nav">
+        <div class="nav-inner">
+            <a href="/" class="brand">Satellite Tracker</a>
+            <ul class="nav-links">
+                <li><a href="/" {% if request.path == '/' %}class="active"{% endif %}>Home</a></li>
+                <li><a href="/about" {% if request.path == '/about' %}class="active"{% endif %}>About</a></li>
+                <li><a href="/tracker" {% if request.path == '/tracker' %}class="active"{% endif %}>Tracker</a></li>
+                <li><a href="/roadmap" {% if request.path == '/roadmap' %}class="active"{% endif %}>Roadmap</a></li>
+            </ul>
+        </div>
+    </header>
+
+    <main>
+        {% block content %}{% endblock %}
+    </main>
+
+    <footer class="site-footer">
+        <div class="section-inner">
+            <p>
+                Built with Flask, Skyfield and Matplotlib. Orbital data courtesy of CelesTrak and Dr T. S. Kelso.
+                Made with Python and a curiosity for space.
+            </p>
+        </div>
+    </footer>
+
+    <dialog id="lightbox">
+        <img id="lightbox-img" src="" alt="Satellite plot, enlarged">
+        <button type="button" id="lightbox-close">Close</button>
+    </dialog>
+
+    <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+</body>
+</html>

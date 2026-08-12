@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% block title %}About the project · Satellite Tracker{% endblock %}
+{% block content %}
+<section class="about about-page">
+    <div class="section-inner">
+        <h1 class="reveal">About the project</h1>
+        <p class="reveal">
+            Advanced Satellite Tracker downloads current orbital data from CelesTrak and works out
+            exactly when a satellite will pass over a chosen location. Skyfield handles the astronomical
+            calculations, and each pass is drawn out as a plot you can read at a glance.
+        </p>
+        <div class="feature-grid">
+            <div class="feature-card reveal">
+                <h3>Live orbital data</h3>
+                <p>Orbital elements refresh automatically from CelesTrak, so every calculation reflects a satellite's current path rather than an outdated one.</p>
+            </div>
+            <div class="feature-card reveal">
+                <h3>Five views of a pass</h3>
+                <p>Choose elevation, azimuth, distance and velocity, a polar sky track, or a ground track, depending on what you want to see.</p>
+            </div>
+            <div class="feature-card reveal">
+                <h3>Automatic pass detection</h3>
+                <p>Rise time, set time, maximum elevation and duration are worked out for you, with the clearest passes highlighted.</p>
+            </div>
+            <div class="feature-card reveal">
+                <h3>Any observer location</h3>
+                <p>Enter a latitude and longitude anywhere on Earth to see passes tailored to that spot.</p>
+            </div>
+        </div>
+        <p class="about-note reveal">
+            Under the bonnet, Skyfield propagates each satellite's two-line element set with the SGP4
+            model, converts the result into altitude, azimuth and distance from the observer, and
+            Matplotlib renders the outcome as a chart.
+        </p>
+        <a href="/tracker" class="button-primary reveal">Try the tracker</a>
+    </div>
+</section>
+{% endblock %}

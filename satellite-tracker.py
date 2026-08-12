@@ -1,4 +1,4 @@
-from flask import Flask, render_template_string, request, jsonify
+from flask import Flask, render_template, request, jsonify
 import matplotlib.pyplot as plt
 import matplotlib
 matplotlib.use('Agg')  # Non-GUI backend for web
@@ -9,6 +9,7 @@ import numpy as np
 from pytz import timezone
 import json
 from datetime import datetime, timedelta
+from urllib.parse import quote
 
 app = Flask(__name__)
 
@@ -25,12 +26,12 @@ SATELLITE_CHARACTERISTICS = {
         'period_minutes': 92,
         'description': 'International Space Station - 51.6° inclination'
     },
-    'TIANGONG': {
-        'type': 'Space Station', 
-        'inclination': 42.8,
+    'CSS (TIANHE)': {
+        'type': 'Space Station',
+        'inclination': 41.5,
         'altitude_range': (350, 450),
         'period_minutes': 91,
-        'description': 'Chinese Space Station - 42.8° inclination'
+        'description': 'Chinese Space Station (Tianhe core module) - 41.5° inclination'
     },
     'NOAA 15': {
         'type': 'Weather Satellite',
@@ -60,15 +61,38 @@ def load_satellites():
     global satellites_cache
     if satellites_cache is None:
         try:
-            station_data = load.tle_file('https://celestrak.com/NORAD/elements/stations.txt')
-            weather_data = load.tle_file('https://celestrak.com/NORAD/elements/weather.txt')
-            
+            # celestrak's gp.php path is identical across queries (only the query
+            # string differs), and skyfield's on-disk TLE cache keys off the URL
+            # path alone, so every call below needs an explicit, distinct
+            # filename or they'll all collide and silently reuse the first result.
+            station_data = load.tle_file(
+                'https://celestrak.org/NORAD/elements/gp.php?GROUP=stations&FORMAT=tle',
+                filename='celestrak_stations.tle')
+            weather_data = load.tle_file(
+                'https://celestrak.org/NORAD/elements/gp.php?GROUP=weather&FORMAT=tle',
+                filename='celestrak_weather.tle')
+
             satellites_cache = {}
             for sat in station_data:
                 satellites_cache[sat.name] = sat
             for sat in weather_data:
                 satellites_cache[sat.name] = sat
-                
+
+            # Featured satellites can get reclassified out of their usual group
+            # (e.g. retired NOAA payloads dropped from "weather") while still
+            # having live TLEs. Fetch those by exact name as a fallback.
+            missing = [name for name in SATELLITE_CHARACTERISTICS if name not in satellites_cache]
+            for name in missing:
+                try:
+                    extra = load.tle_file(
+                        f'https://celestrak.org/NORAD/elements/gp.php?NAME={quote(name)}&FORMAT=tle',
+                        filename=f'celestrak_name_{quote(name, safe="")}.tle')
+                    for sat in extra:
+                        if sat.name == name:
+                            satellites_cache[sat.name] = sat
+                except Exception:
+                    pass
+
         except Exception as e:
             print(f"Error loading satellites: {e}")
             satellites_cache = {}
@@ -355,361 +379,22 @@ def create_plot(data, plot_type):
     
     return img_string
 
-# HTML Template with improved UI
-HTML_TEMPLATE = """
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Advanced Satellite Tracker</title>
-    <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        
-        body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background: linear-gradient(135deg, #0c0c0c 0%, #1a1a2e 50%, #16213e 100%);
-            color: #ffffff;
-            min-height: 100vh;
-            padding: 20px;
-        }
-        
-        .container {
-            max-width: 1400px;
-            margin: 0 auto;
-            background: rgba(255, 255, 255, 0.05);
-            border-radius: 15px;
-            padding: 30px;
-            backdrop-filter: blur(10px);
-            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
-        }
-        
-        h1 {
-            text-align: center;
-            margin-bottom: 30px;
-            background: linear-gradient(45deg, #00ffff, #ff6b6b);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            font-size: 2.5em;
-            text-shadow: 2px 2px 4px rgba(0,0,0,0.5);
-        }
-        
-        .controls {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-            gap: 20px;
-            margin-bottom: 30px;
-            padding: 20px;
-            background: rgba(255, 255, 255, 0.1);
-            border-radius: 10px;
-        }
-        
-        .form-group {
-            display: flex;
-            flex-direction: column;
-        }
-        
-        label {
-            margin-bottom: 8px;
-            font-weight: 600;
-            color: #00ffff;
-        }
-        
-        select, input {
-            padding: 12px;
-            border: 2px solid rgba(0, 255, 255, 0.3);
-            border-radius: 8px;
-            background: rgba(0, 0, 0, 0.3);
-            color: #ffffff;
-            font-size: 14px;
-            transition: border-color 0.3s ease;
-        }
-        
-        select:focus, input:focus {
-            outline: none;
-            border-color: #00ffff;
-            box-shadow: 0 0 10px rgba(0, 255, 255, 0.3);
-        }
-        
-        button {
-            padding: 15px 30px;
-            background: linear-gradient(45deg, #00ffff, #ff6b6b);
-            border: none;
-            border-radius: 8px;
-            color: white;
-            font-size: 16px;
-            font-weight: 600;
-            cursor: pointer;
-            transition: transform 0.2s ease;
-            margin-top: 20px;
-        }
-        
-        button:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 5px 15px rgba(0, 255, 255, 0.3);
-        }
-        
-        .satellite-info {
-            background: rgba(0, 255, 255, 0.1);
-            border: 1px solid rgba(0, 255, 255, 0.3);
-            border-radius: 8px;
-            padding: 15px;
-            margin: 20px 0;
-            font-size: 14px;
-        }
-        
-        .plot-container {
-            text-align: center;
-            margin-top: 30px;
-        }
-        
-        .plot-container img {
-            max-width: 100%;
-            border-radius: 10px;
-            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
-        }
-        
-        .loading {
-            display: none;
-            text-align: center;
-            margin: 20px 0;
-        }
-        
-        .spinner {
-            border: 3px solid rgba(255, 255, 255, 0.1);
-            border-radius: 50%;
-            border-top: 3px solid #00ffff;
-            width: 40px;
-            height: 40px;
-            animation: spin 1s linear infinite;
-            margin: 0 auto;
-        }
-        
-        @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
-        }
-        
-        .error {
-            background: rgba(255, 107, 107, 0.1);
-            border: 2px solid #ff6b6b;
-            border-radius: 8px;
-            padding: 15px;
-            margin: 20px 0;
-            text-align: center;
-        }
-        
-        .plot-type-description {
-            font-size: 12px;
-            color: #aaa;
-            margin-top: 5px;
-        }
-    </style>
-</head>
-<body>
-    <div class="container">
-        <h1> Advanced Satellite Tracker</h1>
-        
-        <form id="tracker-form">
-            <div class="controls">
-                <div class="form-group">
-                    <label for="satellite">Satellite:</label>
-                    <select id="satellite" name="satellite" required>
-                        <option value="">Loading satellites...</option>
-                    </select>
-                </div>
-                
-                <div class="form-group">
-                    <label for="plot_type">Plot Type:</label>
-                    <select id="plot_type" name="plot_type" required>
-                        <option value="altitude">Elevation Over Time</option>
-                        <option value="azimuth">Azimuth Direction</option>
-                        <option value="distance">Distance & Velocity</option>
-                        <option value="polar">Polar Sky Track</option>
-                        <option value="ground_track">Ground Track</option>
-                    </select>
-                    <div class="plot-type-description" id="plot-description">
-                        Shows satellite elevation above horizon over time
-                    </div>
-                </div>
-                
-                <div class="form-group">
-                    <label for="latitude">Latitude:</label>
-                    <input type="number" id="latitude" name="latitude" 
-                           value="-20.3123" step="0.0001" min="-90" max="90" required>
-                </div>
-                
-                <div class="form-group">
-                    <label for="longitude">Longitude:</label>
-                    <input type="number" id="longitude" name="longitude" 
-                           value="118.64498" step="0.0001" min="-180" max="180" required>
-                </div>
-                
-                <div class="form-group">
-                    <label for="hours">Hours to Track:</label>
-                    <select id="hours" name="hours">
-                        <option value="6">6 hours</option>
-                        <option value="12">12 hours</option>
-                        <option value="24" selected>24 hours</option>
-                        <option value="48">48 hours</option>
-                    </select>
-                </div>
-            </div>
-            
-            <button type="submit">Track Satellite</button>
-        </form>
-        
-        <div id="satellite-info" class="satellite-info" style="display: none;"></div>
-        
-        <div class="loading" id="loading">
-            <div class="spinner"></div>
-            <p>Calculating satellite positions...</p>
-        </div>
-        
-        <div id="error-container"></div>
-        <div class="plot-container" id="plot-container"></div>
-    </div>
-
-    <script>
-        const satelliteCharacteristics = {
-            'ISS (ZARYA)': {
-                type: 'Space Station',
-                inclination: 51.6,
-                description: 'International Space Station - 51.6° inclination, ~400km altitude'
-            },
-            'TIANGONG': {
-                type: 'Space Station',
-                inclination: 42.8,
-                description: 'Chinese Space Station - 42.8° inclination, ~400km altitude'
-            },
-            'NOAA 15': {
-                type: 'Weather Satellite',
-                inclination: 98.7,
-                description: 'Polar Weather Satellite - 98.7° inclination, ~850km altitude'
-            },
-            'NOAA 18': {
-                type: 'Weather Satellite',
-                inclination: 99.2,
-                description: 'Polar Weather Satellite - 99.2° inclination, ~860km altitude'
-            },
-            'NOAA 19': {
-                type: 'Weather Satellite', 
-                inclination: 99.1,
-                description: 'Polar Weather Satellite - 99.1° inclination, ~875km altitude'
-            }
-        };
-
-        const plotDescriptions = {
-            'altitude': 'Shows satellite elevation above horizon over time',
-            'azimuth': 'Shows satellite compass direction colored by elevation',
-            'distance': 'Shows distance from observer and orbital velocity',
-            'polar': 'Shows satellite paths across the sky (polar projection)',
-            'ground_track': 'Shows satellite ground track on world map'
-        };
-
-        // Update plot description when type changes
-        document.getElementById('plot_type').addEventListener('change', function() {
-            document.getElementById('plot-description').textContent = 
-                plotDescriptions[this.value] || '';
-        });
-
-        // Update satellite info when satellite changes
-        document.getElementById('satellite').addEventListener('change', function() {
-            const infoDiv = document.getElementById('satellite-info');
-            if (this.value && satelliteCharacteristics[this.value]) {
-                const info = satelliteCharacteristics[this.value];
-                infoDiv.innerHTML = `
-                    <strong>${this.value}</strong><br>
-                    Type: ${info.type}<br>
-                    ${info.description}
-                `;
-                infoDiv.style.display = 'block';
-            } else {
-                infoDiv.style.display = 'none';
-            }
-        });
-
-        // Load satellites on page load
-        fetch('/satellites')
-            .then(response => response.json())
-            .then(data => {
-                const select = document.getElementById('satellite');
-                select.innerHTML = '';
-                
-                // Add featured satellites first
-                const featured = ['ISS (ZARYA)', 'TIANGONG', 'NOAA 15', 'NOAA 18', 'NOAA 19'];
-                featured.forEach(name => {
-                    if (data.includes(name)) {
-                        const option = document.createElement('option');
-                        option.value = name;
-                        option.textContent = name;
-                        select.appendChild(option);
-                    }
-                });
-                
-                // Add separator
-                const separator = document.createElement('option');
-                separator.disabled = true;
-                separator.textContent = '--- All Satellites ---';
-                select.appendChild(separator);
-                
-                // Add all other satellites
-                data.forEach(name => {
-                    if (!featured.includes(name)) {
-                        const option = document.createElement('option');
-                        option.value = name;
-                        option.textContent = name;
-                        select.appendChild(option);
-                    }
-                });
-            })
-            .catch(error => {
-                console.error('Error loading satellites:', error);
-                document.getElementById('satellite').innerHTML = 
-                    '<option value="">Error loading satellites</option>';
-            });
-
-        // Handle form submission
-        document.getElementById('tracker-form').addEventListener('submit', function(e) {
-            e.preventDefault();
-            
-            const formData = new FormData(this);
-            const params = new URLSearchParams();
-            for (let [key, value] of formData) {
-                params.append(key, value);
-            }
-            
-            document.getElementById('loading').style.display = 'block';
-            document.getElementById('plot-container').innerHTML = '';
-            document.getElementById('error-container').innerHTML = '';
-            
-            fetch('/plot?' + params.toString())
-                .then(response => response.json())
-                .then(data => {
-                    document.getElementById('loading').style.display = 'none';
-                    
-                    if (data.error) {
-                        document.getElementById('error-container').innerHTML = 
-                            `<div class="error"> ${data.error}</div>`;
-                    } else {
-                        document.getElementById('plot-container').innerHTML = 
-                            `<img src="data:image/png;base64,${data.plot}" alt="Satellite Plot">`;
-                    }
-                })
-                .catch(error => {
-                    document.getElementById('loading').style.display = 'none';
-                    document.getElementById('error-container').innerHTML = 
-                        `<div class="error"> Error: ${error.message}</div>`;
-                });
-        });
-    </script>
-</body>
-</html>
-"""
 
 @app.route('/')
-def index():
-    return render_template_string(HTML_TEMPLATE)
+def home():
+    return render_template('home.html')
+
+@app.route('/about')
+def about():
+    return render_template('about.html')
+
+@app.route('/tracker')
+def tracker():
+    return render_template('tracker.html')
+
+@app.route('/roadmap')
+def roadmap():
+    return render_template('roadmap.html')
 
 @app.route('/satellites')
 def get_satellites():

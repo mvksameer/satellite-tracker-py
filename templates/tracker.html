@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+{% block title %}Track a satellite · Satellite Tracker{% endblock %}
+{% block content %}
+<section class="tracker">
+    <div class="section-inner">
+        <h1 class="reveal">Track a satellite</h1>
+        <p class="reveal">
+            Pick a satellite, set your location and choose how you would like to see the pass. The plot
+            below updates as soon as the calculation finishes.
+        </p>
+        <div class="container reveal">
+            <form id="tracker-form">
+                <div class="controls">
+                    <div class="form-group">
+                        <label for="satellite">Satellite:</label>
+                        <select id="satellite" name="satellite" required>
+                            <option value="">Loading satellites...</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="plot_type">Plot Type:</label>
+                        <select id="plot_type" name="plot_type" required>
+                            <option value="altitude">Elevation Over Time</option>
+                            <option value="azimuth">Azimuth Direction</option>
+                            <option value="distance">Distance & Velocity</option>
+                            <option value="polar">Polar Sky Track</option>
+                            <option value="ground_track">Ground Track</option>
+                        </select>
+                        <div class="plot-type-description" id="plot-description">
+                            Shows satellite elevation above horizon over time
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="latitude">Latitude:</label>
+                        <input type="number" id="latitude" name="latitude"
+                               value="-20.3123" step="0.00001" min="-90" max="90" required>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="longitude">Longitude:</label>
+                        <input type="number" id="longitude" name="longitude"
+                               value="118.64498" step="0.00001" min="-180" max="180" required>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="hours">Hours to Track:</label>
+                        <select id="hours" name="hours">
+                            <option value="6">6 hours</option>
+                            <option value="12">12 hours</option>
+                            <option value="24" selected>24 hours</option>
+                            <option value="48">48 hours</option>
+                        </select>
+                    </div>
+                </div>
+
+                <button type="submit">Track Satellite</button>
+            </form>
+
+            <div id="satellite-info" class="satellite-info" style="display: none;"></div>
+
+            <div class="loading" id="loading">
+                <div class="spinner"></div>
+                <p>Calculating satellite positions...</p>
+            </div>
+
+            <div id="error-container"></div>
+            <div class="plot-container" id="plot-container"></div>
+        </div>
+    </div>
+</section>
+{% endblock %}

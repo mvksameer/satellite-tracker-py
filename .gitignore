@@ -19,9 +19,16 @@ ENV/
 .DS_Store
 Thumbs.db
 
+# Environment variables and secrets
+.env
+.env.*
+!.env.example
+
+# Claude Code local settings (machine-specific, not shared with the team)
+.claude/settings.local.json
+
 # Satellite TLE data files (downloaded automatically)
-stations.txt
-weather.txt
+celestrak_*.tle
 
 # Skyfield data cache
 *.bsp
@@ -31,6 +38,3 @@ weather.txt
 
 # Log files
 *.log
-
-# Optional: Remove this line if you want to commit screenshots
-screenshots/
